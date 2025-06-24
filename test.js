@@ -84,7 +84,8 @@ function authMiddleware(req, res, next) {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, SECRET);
+    const decoded = jwt.verify(token, process.env.SECRET);
+
     req.user = decoded;
     next();
   } catch (err) {
@@ -217,7 +218,7 @@ app.post('/login', async (req, res) => {
   if (!isMatch) return res.json({ success: false, message: 'Incorrect password' });
 
   // ✅ Include name in token payload for /api/me
-  const token = jwt.sign({ username: user.username, name: user.username }, SECRET, { expiresIn: '1h' });
+  const token = jwt.sign({ username: user.username, name: user.username }, process.env.SECRET, { expiresIn: '1h' });
   res.json({ success: true, message: 'Login successful', token });
 });
 

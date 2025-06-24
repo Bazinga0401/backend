@@ -16,8 +16,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const GridFsStorage = require('multer-gridfs-storage').default || require('multer-gridfs-storage'); // ✅
 
-// Preflight support
-app.options('*', cors());
+
 
 const Grid = require('gridfs-stream');
 
@@ -35,7 +34,8 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 };
-
+// Preflight support
+app.options('*', cors());
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions)); // Preflight handler
 

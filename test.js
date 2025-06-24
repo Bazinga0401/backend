@@ -23,7 +23,7 @@ const SECRET = process.env.SECRET;
 const app = express();
 app.use(express.json());
 app.use(cors({
-  origin: "https://Bazinga0401.github.io", // GitHub Pages frontend
+  origin: ["https://Bazinga0401.github.io"],  // ✅ Your GitHub Pages URL
   credentials: true
 }));
 

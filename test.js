@@ -16,6 +16,8 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const GridFsStorage = require('multer-gridfs-storage').default || require('multer-gridfs-storage'); // ✅
 
+// Preflight support
+app.options('*', cors());
 
 const Grid = require('gridfs-stream');
 
@@ -23,9 +25,19 @@ const SECRET = process.env.SECRET;
 const app = express();
 app.use(express.json());
 app.use(cors({
-  origin: ["https://Bazinga0401.github.io"],  // ✅ Your GitHub Pages URL
+  origin: "https://bazinga0401.github.io", // ✅ Your GitHub Pages domain
   credentials: true
 }));
+
+const corsOptions = {
+  origin: ["https://bazinga0401.github.io", "http://localhost:5500"],
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // Preflight handler
 
 app.use(express.static(path.join(__dirname, 'public')));
 

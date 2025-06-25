@@ -8,7 +8,7 @@ self.addEventListener('push', function (event) {
     icon: '/pfp.ico', // Optional
     badge: '/badge.png', // Optional
     data: {
-      url: 'http://127.0.0.1:5500/index.html'  // 👈 Set your website URL here
+      url: 'https://bazinga0401.github.io/frontend2/index.html'  // 👈 Set your website URL here
     }
   };
 

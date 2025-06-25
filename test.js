@@ -338,7 +338,7 @@ app.post('/subscribe', (req, res) => {
   res.status(201).json({ message: 'Subscribed successfully' });
 });
 
-cron.schedule('09 12 * * *', async () => {
+cron.schedule('* * * * *', async () => {
   const nowIST = moment().tz('Asia/Kolkata');
   const tomorrow = nowIST.clone().add(1, 'day');
   const weekdayIndex = tomorrow.isoWeekday() % 7; // 0=Sunday ... 6=Saturday

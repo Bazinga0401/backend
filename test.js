@@ -1,5 +1,5 @@
-require('dotenv').config(); // 👈 Load variables from .env
-
+// ✅ Load environment variables
+require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -12,21 +12,13 @@ const path = require('path');
 const moment = require('moment-timezone');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
-
 const crypto = require('crypto');
-const GridFsStorage = require('multer-gridfs-storage').default || require('multer-gridfs-storage'); // ✅
-
-
-
+const { GridFsStorage } = require('multer-gridfs-storage');
 const Grid = require('gridfs-stream');
 
 const SECRET = process.env.SECRET;
 const app = express();
 app.use(express.json());
-app.use(cors({
-  origin: "https://bazinga0401.github.io", // ✅ Your GitHub Pages domain
-  credentials: true
-}));
 
 const corsOptions = {
   origin: ["https://bazinga0401.github.io", "http://localhost:5500"],
@@ -34,20 +26,14 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 };
-// Preflight support
-app.options('*', cors());
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // Preflight handler
+app.options("*", cors(corsOptions));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-
-
-const otpStore = {}; // In-memory OTPs { username: { otp, expiresAt } }
-
+const otpStore = {}; // In-memory OTPs { email/username: { otp, expiresAt } }
 
 const nodemailer = require('nodemailer');
-
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -56,396 +42,167 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-
-
-// MongoDB connection
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+.then(() => console.log('MongoDB connected'))
+.catch(err => console.error('MongoDB connection error:', err));
 
-// GridFS setup
 let gfs, gridFSBucket;
-let upload; 
+let upload;
+
 const conn = mongoose.connection;
 conn.once('open', () => {
-  gridFSBucket = new mongoose.mongo.GridFSBucket(conn.db, {
-    bucketName: 'uploads'
-  });
-
+  gridFSBucket = new mongoose.mongo.GridFSBucket(conn.db, { bucketName: 'uploads' });
   gfs = Grid(conn.db, mongoose.mongo);
   gfs.collection('uploads');
 
   const storage = new GridFsStorage({
     url: process.env.MONGO_URI,
-    file: (req, file) => {
-      return new Promise((resolve, reject) => {
-        crypto.randomBytes(16, (err, buf) => {
-          if (err) return reject(err);
-          const filename = buf.toString('hex') + path.extname(file.originalname);
-          const fileInfo = {
-            filename,
-            bucketName: 'uploads'
-          };
-          resolve(fileInfo);
-        });
+    file: (req, file) => new Promise((resolve, reject) => {
+      crypto.randomBytes(16, (err, buf) => {
+        if (err) return reject(err);
+        const filename = buf.toString('hex') + path.extname(file.originalname);
+        resolve({ filename, bucketName: 'uploads', metadata: { originalName: file.originalname } });
       });
-    }
+    })
   });
-
-  upload = multer({ storage }); // ✅ Safe to initialize now
+  upload = multer({ storage });
 });
 
-
-// Middleware for auth
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ success: false, message: 'Missing token' });
-
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.SECRET);
-
+    const decoded = jwt.verify(token, SECRET);
     req.user = decoded;
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ success: false, message: 'Invalid token' });
   }
 }
 
-// Admin check
 function adminMiddleware(req, res, next) {
   const allowed = ['Harsh Ninania', 'Satyam Pr'];
-  if (!allowed.includes(req.user.username)) {
-    return res.status(403).json({ success: false, message: 'Only admins can perform this action' });
-  }
+  if (!allowed.includes(req.user.username)) return res.status(403).json({ success: false, message: 'Admins only' });
   next();
 }
 
-// Mongoose Models
-const userSchema = new mongoose.Schema({
-  username: String, 
-  email: String,   
-  password: String
-});
+const User = mongoose.model('User', new mongoose.Schema({ username: String, email: String, password: String }));
+const Task = mongoose.model('Task', new mongoose.Schema({ day: Number, name: String, time: String, file: String, week: { type: String, enum: ['this', 'next'], default: 'this' } }));
+const UploadedFile = mongoose.model('UploadedFile', new mongoose.Schema({ filename: String, originalName: String, uploadedAt: { type: Date, default: Date.now } }));
 
-const User = mongoose.model('User', userSchema);
-
-const taskSchema = new mongoose.Schema({
-  day: Number,
-  name: String,
-  time: String,
-  file: String,
-  week: { type: String, enum: ['this', 'next'], default: 'this' }
-});
-const Task = mongoose.model('Task', taskSchema);
-
-const fileSchema = new mongoose.Schema({
-  filename: String,
-  originalName: String,
-  uploadedAt: { type: Date, default: Date.now }
-});
-const UploadedFile = mongoose.model('UploadedFile', fileSchema);
-
-// Multer-GridFS storage setup
-const storage = new GridFsStorage({
-  url: process.env.MONGO_URI,
-  file: (req, file) => {
-    return new Promise((resolve, reject) => {
-      crypto.randomBytes(16, (err, buf) => {
-        if (err) return reject(err);
-        const filename = buf.toString('hex') + path.extname(file.originalname);
-        const fileInfo = {
-          filename,
-          bucketName: 'uploads'
-        };
-        resolve(fileInfo);
-      });
-    });
-  }
-});
-
-const upload = multer({ storage });
-
-
-
-app.post('/request-reset', async (req, res) => {
-  const { username } = req.body;
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-    const otp = Math.floor(100000 + Math.random() * 900000);
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-    otpStore[username] = { otp, expiresAt };
-
-    const mailOptions = {
-      from: 'pipikahisab@gmail.com',
-      to: user.email, // ✅ DB email
-      subject: 'Your OTP for Password Reset',
-      text: `Your OTP is ${otp}. It will expire in 5 minutes.`
-    };
-
-    await transporter.sendMail(mailOptions);
-    res.json({ success: true, message: 'OTP sent to your registered email' });
-
-  } catch (err) {
-    console.error('Reset OTP error:', err);
-    res.status(500).json({ success: false, message: 'Server error while sending OTP' });
-  }
-});
-
-
-
-
-app.post('/verify-reset', async (req, res) => {
-  const { username, otp, newPassword } = req.body;
-  const record = otpStore[username];
-  if (!record || record.otp != otp || Date.now() > record.expiresAt) {
-    return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
-  }
-
-  const user = await User.findOne({ username });
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-  const hashed = await bcrypt.hash(newPassword, 10);
-  user.password = hashed;
-  await user.save();
-
-  delete otpStore[username];
-  res.json({ success: true, message: 'Password reset successful' });
-});
-
-
-// Auth routes
 app.post('/api/signup', async (req, res) => {
   const { name, email, password } = req.body;
-const existing = await User.findOne({ username: name });
-if (existing) return res.json({ success: false, message: 'Username already exists' });
-
-const hashed = await bcrypt.hash(password, 10);
-await User.create({ username: name, email, password: hashed });
-res.json({ success: true, message: 'User registered' });
+  const existing = await User.findOne({ username: name });
+  if (existing) return res.json({ success: false, message: 'Username already exists' });
+  const hashed = await bcrypt.hash(password, 10);
+  await User.create({ username: name, email, password: hashed });
+  res.json({ success: true, message: 'User registered' });
 });
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
   const user = await User.findOne({ username });
   if (!user) return res.json({ success: false, message: 'User not found' });
-
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) return res.json({ success: false, message: 'Incorrect password' });
-
-  // ✅ Include name in token payload for /api/me
-  const token = jwt.sign({ username: user.username, name: user.username }, process.env.SECRET, { expiresIn: '1h' });
+  const token = jwt.sign({ username: user.username, name: user.username }, SECRET, { expiresIn: '1h' });
   res.json({ success: true, message: 'Login successful', token });
 });
 
-// ✅ Route to get logged-in user's name
 app.get('/api/me', authMiddleware, (req, res) => {
-  try {
-    res.json({ success: true, name: req.user.name });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error getting user info' });
-  }
+  res.json({ success: true, name: req.user.name });
 });
-//SignUp page APis
-// === FRONTEND SIGNUP OTP HANDLING ===
+
 app.post('/api/send-otp', async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
-
   const otp = Math.floor(100000 + Math.random() * 900000);
   const expiresAt = Date.now() + 5 * 60 * 1000;
   otpStore[email] = { otp, expiresAt };
-
-  const mailOptions = {
-    from: 'pipikahisab@gmail.com',
-    to: email,
-    subject: 'Your OTP for Sign Up',
-    text: `Your OTP is ${otp}. It will expire in 5 minutes.`
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
-    res.json({ success: true, message: 'OTP sent to email' });
+    await transporter.sendMail({ from: 'pipikahisab@gmail.com', to: email, subject: 'OTP for Sign Up', text: `Your OTP is ${otp}` });
+    res.json({ success: true, message: 'OTP sent' });
   } catch (err) {
-    console.error('Email send error:', err);
-    res.status(500).json({ success: false, message: 'Failed to send OTP email' });
+    res.status(500).json({ success: false, message: 'OTP email failed' });
   }
 });
 
 app.post('/api/verify-otp', (req, res) => {
   const { email, otp } = req.body;
   const record = otpStore[email];
-
-  if (!record || record.otp != otp || Date.now() > record.expiresAt) {
-    return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
-  }
-
+  if (!record || record.otp != otp || Date.now() > record.expiresAt) return res.status(400).json({ success: false, message: 'Invalid OTP' });
   delete otpStore[email];
-  res.json({ success: true, message: 'OTP verified' });
+  res.json({ success: true });
 });
 
-// Task routes
 app.post('/task', authMiddleware, adminMiddleware, async (req, res) => {
   const { day, name, time, week } = req.body;
-
   try {
-    const newTask = new Task({ day, name, time, week });
-    await newTask.save();
-    res.json({ success: true, message: 'Task saved' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error saving task' });
+    await Task.create({ day, name, time, week });
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ success: false });
   }
 });
 
 app.get('/tasks', authMiddleware, async (req, res) => {
-  try {
-    const allTasks = await Task.find({});
-    res.json({ success: true, tasks: allTasks });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error fetching tasks' });
-  }
+  const tasks = await Task.find();
+  res.json({ success: true, tasks });
 });
 
 app.delete('/task/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const task = await Task.findByIdAndDelete(req.params.id);
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-    res.json({ success: true, message: 'Task deleted' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
+  const deleted = await Task.findByIdAndDelete(req.params.id);
+  if (!deleted) return res.status(404).json({ success: false });
+  res.json({ success: true });
 });
 
 app.patch('/task/:id/add-file', authMiddleware, adminMiddleware, async (req, res) => {
   const { filename } = req.body;
-  if (!filename) return res.status(400).json({ success: false, message: 'Filename missing' });
-
-  try {
-    const updated = await Task.findByIdAndUpdate(req.params.id, { file: filename }, { new: true });
-    if (!updated) return res.status(404).json({ success: false, message: 'Task not found' });
-
-    res.json({ success: true, task: updated });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error while updating file reference' });
-  }
+  const updated = await Task.findByIdAndUpdate(req.params.id, { file: filename }, { new: true });
+  if (!updated) return res.status(404).json({ success: false });
+  res.json({ success: true, task: updated });
 });
 
 app.patch('/task/:id/remove-file', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const updatedTask = await Task.findByIdAndUpdate(
-      req.params.id,
-      { $unset: { file: "" } },
-      { new: true }
-    );
-
-    if (!updatedTask) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
-    }
-
-    res.json({ success: true, task: updatedTask });
-  } catch (err) {
-    console.error('Error removing file reference:', err);
-    res.status(500).json({ success: false, message: 'Server error while removing file reference' });
-  }
+  const updated = await Task.findByIdAndUpdate(req.params.id, { $unset: { file: '' } }, { new: true });
+  if (!updated) return res.status(404).json({ success: false });
+  res.json({ success: true, task: updated });
 });
 
-// Push notification setup
-webPush.setVapidDetails(
-  process.env.ADMIN_EMAIL,
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+webPush.setVapidDetails(process.env.ADMIN_EMAIL, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
 
-// Store subscriptions (in-memory or replace with DB)
 const subscriptions = [];
 app.post('/subscribe', (req, res) => {
-  const subscription = req.body;
-  subscriptions.push(subscription);
-  res.status(201).json({ message: 'Subscribed successfully' });
+  subscriptions.push(req.body);
+  res.status(201).json({ message: 'Subscribed' });
 });
 
 cron.schedule('09 12 * * *', async () => {
   const nowIST = moment().tz('Asia/Kolkata');
   const tomorrow = nowIST.clone().add(1, 'day');
-  const weekdayIndex = tomorrow.isoWeekday() % 7; // 0=Sunday ... 6=Saturday
-
-  try {
-    const tasks = await Task.find({ day: weekdayIndex });
-    const payloads = tasks.map(task => JSON.stringify({
-      title: 'Breaking News: You Have a Task 📰',
-      body: `"${task.name}" is scheduled for tomorrow at ${task.time}`,
-      vibrate: [200, 100, 200]
-    }));
-
-    for (const sub of subscriptions) {
-      for (const payload of payloads) {
-        try {
-          await webPush.sendNotification(sub, payload);
-        } catch (err) {
-          console.error('[PUSH FAILED]', err);
-        }
-      }
+  const weekdayIndex = tomorrow.isoWeekday() % 7;
+  const tasks = await Task.find({ day: weekdayIndex });
+  const payloads = tasks.map(task => JSON.stringify({ title: 'Task Reminder', body: `${task.name} at ${task.time}`, vibrate: [200, 100, 200] }));
+  for (const sub of subscriptions) {
+    for (const payload of payloads) {
+      try {
+        await webPush.sendNotification(sub, payload);
+      } catch (e) { console.error('[PUSH FAILED]', e); }
     }
-
-    console.log(`[CRON] Sent ${tasks.length} notifications for tasks scheduled tomorrow.`);
-  } catch (err) {
-    console.error('[CRON ERROR]', err);
   }
-}, {
-  timezone: 'Asia/Kolkata'
 });
 
-// === public/sw.js (must be served as static file) ===
-// self.addEventListener('push', event => {
-//   if (event.data) {
-//     const data = event.data.json();
-//     self.registration.showNotification(data.title, {
-//       body: data.body,
-//       icon: '/icon.png',
-//       vibrate: data.vibrate || [100, 50, 100]
-//     });
-//   }
-// });
-
-
-// File upload
 app.post('/upload', authMiddleware, adminMiddleware, (req, res) => {
-  if (!upload) {
-    return res.status(503).json({ success: false, message: 'Upload system not ready. Please try again in a few seconds.' });
-  }
-
-  upload.single('file')(req, res, async function (err) {
-    if (err) {
-      console.error('Multer error:', err);
-      return res.status(500).json({ success: false, message: 'File upload error', error: err.message });
-    }
-
-    if (!req.file) {
-      console.error('No file received!');
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
-    }
-
-    try {
-      await UploadedFile.create({
-        filename: req.file.filename,
-        originalName: req.file.originalname
-      });
-
-      res.json({ success: true, file: req.file });
-    } catch (dbErr) {
-      console.error('DB Save Error:', dbErr);
-      res.status(500).json({ success: false, message: 'Failed to save file metadata' });
-    }
+  if (!upload) return res.status(503).json({ success: false });
+  upload.single('file')(req, res, async err => {
+    if (err) return res.status(500).json({ success: false, message: 'Upload error', error: err.message });
+    await UploadedFile.create({ filename: req.file.filename, originalName: req.file.originalname });
+    res.json({ success: true, file: req.file });
   });
 });
-
-
 
 app.get('/files', authMiddleware, async (req, res) => {
   const files = await UploadedFile.find().sort({ uploadedAt: -1 });
@@ -453,55 +210,32 @@ app.get('/files', authMiddleware, async (req, res) => {
 });
 
 app.get('/download/:filename', authMiddleware, async (req, res) => {
-  try {
-    const file = await gfs.files.findOne({ filename: req.params.filename });
-    if (!file) return res.status(404).json({ success: false, message: 'File not found' });
-
-    const readStream = gridFSBucket.openDownloadStreamByName(file.filename);
-    res.set('Content-Type', file.contentType || 'application/octet-stream');
-    res.set('Content-Disposition', `attachment; filename="${file.filename}"`);
-
-    readStream.on('error', err => {
-      res.status(500).json({ success: false, message: 'Stream error while downloading file' });
-    });
-
-    readStream.pipe(res);
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error retrieving file' });
-  }
+  const file = await gfs.files.findOne({ filename: req.params.filename });
+  if (!file) return res.status(404).json({ success: false });
+  const original = file.metadata?.originalName || file.filename;
+  const stream = gridFSBucket.openDownloadStreamByName(file.filename);
+  res.set('Content-Type', file.contentType || 'application/octet-stream');
+  res.set('Content-Disposition', `attachment; filename="${original}"`);
+  stream.pipe(res);
 });
 
 app.delete('/delete-file/:filename', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const file = await gfs.files.findOne({ filename: req.params.filename });
-    if (!file) return res.status(404).json({ success: false, message: 'File not found' });
-
-    gridFSBucket.delete(file._id, async (err) => {
-      if (err) return res.status(500).json({ success: false, message: 'Error deleting file' });
-
-      await UploadedFile.deleteOne({ filename: file.filename });
-      res.json({ success: true, message: 'File deleted from DB' });
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error deleting file' });
-  }
+  const file = await gfs.files.findOne({ filename: req.params.filename });
+  if (!file) return res.status(404).json({ success: false });
+  gridFSBucket.delete(file._id, async err => {
+    if (err) return res.status(500).json({ success: false });
+    await UploadedFile.deleteOne({ filename: file.filename });
+    res.json({ success: true });
+  });
 });
 
 app.post('/send-test-push', (req, res) => {
-  const payload = JSON.stringify({
-    title: 'Breaking News: You Have a Task 📰',
-    body: 'This is a manual push from backend!',
-    icon: './pfp.ico',
-    vibrate: [100, 50, 100]
-  });
-
+  const payload = JSON.stringify({ title: 'Reminder', body: 'Test push notification', vibrate: [100, 50, 100] });
   subscriptions.forEach(sub => {
     webPush.sendNotification(sub, payload).catch(err => console.error('Push failed:', err));
   });
-
-  res.json({ success: true, message: 'Test push sent!' });
+  res.json({ success: true });
 });
 
-// Start server
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

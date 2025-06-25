@@ -68,14 +68,36 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // GridFS setup
 let gfs, gridFSBucket;
+let upload; 
 const conn = mongoose.connection;
 conn.once('open', () => {
   gridFSBucket = new mongoose.mongo.GridFSBucket(conn.db, {
     bucketName: 'uploads'
   });
+
   gfs = Grid(conn.db, mongoose.mongo);
   gfs.collection('uploads');
+
+  const storage = new GridFsStorage({
+    url: process.env.MONGO_URI,
+    file: (req, file) => {
+      return new Promise((resolve, reject) => {
+        crypto.randomBytes(16, (err, buf) => {
+          if (err) return reject(err);
+          const filename = buf.toString('hex') + path.extname(file.originalname);
+          const fileInfo = {
+            filename,
+            bucketName: 'uploads'
+          };
+          resolve(fileInfo);
+        });
+      });
+    }
+  });
+
+  upload = multer({ storage }); // ✅ Safe to initialize now
 });
+
 
 // Middleware for auth
 function authMiddleware(req, res, next) {
@@ -394,6 +416,10 @@ cron.schedule('09 12 * * *', async () => {
 
 // File upload
 app.post('/upload', authMiddleware, adminMiddleware, (req, res) => {
+  if (!upload) {
+    return res.status(503).json({ success: false, message: 'Upload system not ready. Please try again in a few seconds.' });
+  }
+
   upload.single('file')(req, res, async function (err) {
     if (err) {
       console.error('Multer error:', err);
@@ -406,10 +432,11 @@ app.post('/upload', authMiddleware, adminMiddleware, (req, res) => {
     }
 
     try {
-      const saved = await UploadedFile.create({
+      await UploadedFile.create({
         filename: req.file.filename,
         originalName: req.file.originalname
       });
+
       res.json({ success: true, file: req.file });
     } catch (dbErr) {
       console.error('DB Save Error:', dbErr);
@@ -417,6 +444,7 @@ app.post('/upload', authMiddleware, adminMiddleware, (req, res) => {
     }
   });
 });
+
 
 
 app.get('/files', authMiddleware, async (req, res) => {

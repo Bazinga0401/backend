@@ -393,17 +393,31 @@ cron.schedule('09 12 * * *', async () => {
 
 
 // File upload
-app.post('/upload', authMiddleware, adminMiddleware, upload.single('file'), async (req, res) => {
-  try {
-    await UploadedFile.create({
-      filename: req.file.filename,
-      originalName: req.file.originalname
-    });
-    res.json({ success: true, file: req.file });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error saving file metadata' });
-  }
+app.post('/upload', authMiddleware, adminMiddleware, (req, res) => {
+  upload.single('file')(req, res, async function (err) {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(500).json({ success: false, message: 'File upload error', error: err.message });
+    }
+
+    if (!req.file) {
+      console.error('No file received!');
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    try {
+      const saved = await UploadedFile.create({
+        filename: req.file.filename,
+        originalName: req.file.originalname
+      });
+      res.json({ success: true, file: req.file });
+    } catch (dbErr) {
+      console.error('DB Save Error:', dbErr);
+      res.status(500).json({ success: false, message: 'Failed to save file metadata' });
+    }
+  });
 });
+
 
 app.get('/files', authMiddleware, async (req, res) => {
   const files = await UploadedFile.find().sort({ uploadedAt: -1 });

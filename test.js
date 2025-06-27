@@ -330,12 +330,12 @@ webPush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY
 );
 
-// Store subscriptions (in-memory or replace with DB)
 const subscriptions = [];
+
 app.post('/subscribe', (req, res) => {
-  const subscription = req.body;
-  subscriptions.push(subscription);
-  res.status(201).json({ message: 'Subscribed successfully' });
+  const sub = req.body;
+  subscriptions.push(sub);
+  res.status(201).json({ success: true, message: 'Subscribed' });
 });
 
 

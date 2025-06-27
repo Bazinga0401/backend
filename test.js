@@ -342,16 +342,20 @@ app.post('/subscribe', (req, res) => {
 cron.schedule('* * * * *', async () => {
   const nowIST = moment().tz('Asia/Kolkata');
   const tomorrow = nowIST.clone().add(1, 'day');
-  const weekdayIndex = tomorrow.day();
 
-console.log('[DEBUG] Now IST:', nowIST.format());
-console.log('[DEBUG] Tomorrow:', tomorrow.format());
-console.log('[DEBUG] Tomorrow weekdayIndex:', weekdayIndex);
+  // Adjust JS Sunday=0 to DB Monday=0
+  const jsTomorrowDay = tomorrow.day();
+  const dbTomorrowDay = (jsTomorrowDay + 6) % 7;
+
+  console.log('[DEBUG] Now IST:', nowIST.format());
+  console.log('[DEBUG] Tomorrow:', tomorrow.format());
+  console.log('[DEBUG] JS Day (0=Sun):', jsTomorrowDay);
+  console.log('[DEBUG] DB Day (0=Mon):', dbTomorrowDay);
 
   try {
-    const tasks = await Task.find({ day: weekdayIndex });
+    const tasks = await Task.find({ day: dbTomorrowDay });
     const payloads = tasks.map(task => JSON.stringify({
-      title: 'Breaking News: You Have a Task 📰',
+      title: '🗓 Task Reminder!',
       body: `"${task.name}" is scheduled for tomorrow at ${task.time}`,
       vibrate: [200, 100, 200]
     }));
@@ -366,7 +370,7 @@ console.log('[DEBUG] Tomorrow weekdayIndex:', weekdayIndex);
       }
     }
 
-    console.log(`[CRON] Sent ${tasks.length} notifications for tasks scheduled tomorrow.`);
+    console.log(`[CRON] Sent ${tasks.length} notifications for DB day ${dbTomorrowDay}.`);
   } catch (err) {
     console.error('[CRON ERROR]', err);
   }

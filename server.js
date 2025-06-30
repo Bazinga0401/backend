@@ -281,25 +281,12 @@ app.delete('/delete-file/:filename', authMiddleware, adminMiddleware, async (req
 webPush.setVapidDetails(process.env.ADMIN_EMAIL, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
 
 const Subscription = require('./subscription');
-await Subscription.updateOne(
-  { endpoint: subscription.endpoint },
-  { $set: subscription },
-  { upsert: true }
-);
 
-app.post('/subscribe', async (req, res) => {
+
+app.post('/subscribe', (req, res) => {
   const sub = req.body;
-  try {
-    await Subscription.updateOne(
-      { endpoint: sub.endpoint },
-      { $set: sub },
-      { upsert: true }
-    );
-    res.status(201).json({ success: true, message: 'Subscribed' });
-  } catch (err) {
-    console.error('[SUBSCRIBE ERROR]', err);
-    res.status(500).json({ success: false, message: 'Subscription failed' });
-  }
+  subscriptions.push(sub);
+  res.status(201).json({ success: true, message: 'Subscribed' });
 });
 
 
@@ -366,22 +353,13 @@ app.post('/send-test-push', (req, res) => {
     body: 'This is a manual push from backend!',
     icon: './pfp.ico',
     vibrate: [100, 50, 100]
- });
+  });
 
-  try {
-    const subscriptions = await Subscription.find();
+  subscriptions.forEach(sub => {
+    webPush.sendNotification(sub, payload).catch(err => console.error('Push failed:', err));
+  });
 
-    for (const sub of subscriptions) {
-      await webPush.sendNotification(sub, payload).catch(err => {
-        console.error('Push failed:', err);
-      });
-    }
-
-    res.json({ success: true, message: 'Test push sent!' });
-  } catch (err) {
-    console.error('[TEST PUSH ERROR]', err);
-    res.status(500).json({ success: false, message: 'Push failed' });
-  }
+  res.json({ success: true, message: 'Test push sent!' });
 });
 // Start server
 const PORT = process.env.PORT;

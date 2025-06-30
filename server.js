@@ -281,14 +281,12 @@ app.delete('/delete-file/:filename', authMiddleware, adminMiddleware, async (req
 webPush.setVapidDetails(process.env.ADMIN_EMAIL, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
 
 const Subscription = require('./subscription');
-async function updateSubscription() {
 await Subscription.updateOne(
-  { endpoint: sub.endpoint },
-  { $set: sub },
+  { endpoint: subscription.endpoint },
+  { $set: subscription },
   { upsert: true }
 );
-}
-updateSubscription();
+
 app.post('/subscribe', async (req, res) => {
   const sub = req.body;
   try {
@@ -368,13 +366,22 @@ app.post('/send-test-push', (req, res) => {
     body: 'This is a manual push from backend!',
     icon: './pfp.ico',
     vibrate: [100, 50, 100]
-  });
+ });
 
-  subscriptions.forEach(sub => {
-    webPush.sendNotification(sub, payload).catch(err => console.error('Push failed:', err));
-  });
+  try {
+    const subscriptions = await Subscription.find();
 
-  res.json({ success: true, message: 'Test push sent!' });
+    for (const sub of subscriptions) {
+      await webPush.sendNotification(sub, payload).catch(err => {
+        console.error('Push failed:', err);
+      });
+    }
+
+    res.json({ success: true, message: 'Test push sent!' });
+  } catch (err) {
+    console.error('[TEST PUSH ERROR]', err);
+    res.status(500).json({ success: false, message: 'Push failed' });
+  }
 });
 // Start server
 const PORT = process.env.PORT;

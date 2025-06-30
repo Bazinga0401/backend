@@ -281,13 +281,14 @@ app.delete('/delete-file/:filename', authMiddleware, adminMiddleware, async (req
 webPush.setVapidDetails(process.env.ADMIN_EMAIL, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
 
 const Subscription = require('./subscription');
+async function updateSubscription() {
 await Subscription.updateOne(
   { endpoint: sub.endpoint },
   { $set: sub },
   { upsert: true }
 );
 
-
+updateSubscription();
 app.post('/subscribe', async (req, res) => {
   const sub = req.body;
   try {

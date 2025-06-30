@@ -287,7 +287,7 @@ await Subscription.updateOne(
   { $set: sub },
   { upsert: true }
 );
-
+}
 updateSubscription();
 app.post('/subscribe', async (req, res) => {
   const sub = req.body;

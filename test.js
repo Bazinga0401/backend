@@ -279,13 +279,30 @@ app.delete('/delete-file/:filename', authMiddleware, adminMiddleware, async (req
 });
 
 webPush.setVapidDetails(process.env.ADMIN_EMAIL, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
-const subscriptions = [];
 
-app.post('/subscribe', (req, res) => {
+const Subscription = require('./subscription');
+await Subscription.updateOne(
+  { endpoint: sub.endpoint },
+  { $set: sub },
+  { upsert: true }
+);
+
+
+app.post('/subscribe', async (req, res) => {
   const sub = req.body;
-  subscriptions.push(sub);
-  res.status(201).json({ success: true, message: 'Subscribed' });
+  try {
+    await Subscription.updateOne(
+      { endpoint: sub.endpoint },
+      { $set: sub },
+      { upsert: true }
+    );
+    res.status(201).json({ success: true, message: 'Subscribed' });
+  } catch (err) {
+    console.error('[SUBSCRIBE ERROR]', err);
+    res.status(500).json({ success: false, message: 'Subscription failed' });
+  }
 });
+
 
 cron.schedule('0 0 * * 1', async () => {
   const oldTasks = await Task.find({ week: 'this' });
@@ -315,22 +332,26 @@ cron.schedule('* * * * *', async () => {
   console.log('[DEBUG] DB Day (0=Mon):', dbTomorrowDay);
 
   try {
-    const tasks = await Task.find({ day: dbTomorrowDay });
+    const tasks = await Task.find({ day: dbTomorrowDay, week: 'this' }); 
     const payloads = tasks.map(task => JSON.stringify({
       title: '🗓 Task Reminder!',
       body: `"${task.name}" is scheduled for tomorrow at ${task.time}`,
       vibrate: [200, 100, 200]
     }));
 
-    for (const sub of subscriptions) {
-      for (const payload of payloads) {
-        try {
-          await webPush.sendNotification(sub, payload);
-        } catch (err) {
-          console.error('[PUSH FAILED]', err);
+    const subscribers = await Subscription.find();
+     
+
+    const dbSubscriptions = await Subscription.find();
+        for (const sub of dbSubscriptions) {
+          for (const payload of payloads) {
+            try {
+              await webPush.sendNotification(sub, payload);
+            } catch (err) {
+              console.error('[PUSH FAILED]', err);
+            }
+          }
         }
-      }
-    }
 
     console.log(`[CRON] Sent ${tasks.length} notifications for DB day ${dbTomorrowDay}.`);
   } catch (err) {
@@ -357,4 +378,3 @@ app.post('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-

@@ -2,9 +2,8 @@
   "name": "chat-app",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "commonjs",
   "scripts": {
-    "start": "node ./server.js"
+    "start": "node ./test.js"
   },
   "keywords": [],
   "author": "",
@@ -25,8 +24,5 @@
     "node-cron": "^4.1.0",
     "nodemailer": "^7.0.3",
     "web-push": "^3.6.7"
-  },
-  "engines": {
-    "node": "20.x"
   }
 }

@@ -432,7 +432,7 @@ cron.schedule('0 0 * * 1', async () => {
 });
 
 //dont forget it uses 24 hour format
-cron.schedule('45 17 * * *', async () => {
+cron.schedule('*/10 * * * * *', async () => {
   const nowIST = moment().tz('Asia/Kolkata');
   const tomorrow = nowIST.clone().add(1, 'day');
 

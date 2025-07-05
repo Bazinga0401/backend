@@ -444,6 +444,44 @@ cron.schedule('45 17 * * *', async () => {
   console.log('[DEBUG] DB Day (0=Mon):', dbTomorrowDay);
 
   try {
+    if(dbTomorrowDay== 0){
+      const tasks = await Task.find({ day: dbTomorrowDay, week: 'next' });
+    const tokenDocs = await FCMToken.find();
+    const tokens = tokenDocs.map(doc => doc.token).filter(Boolean);
+
+    if (tokens.length === 0) {
+      console.log('[INFO] No tokens found, skipping FCM push.');
+      return;
+    }
+
+    for (const task of tasks) {
+      const message = {
+        notification: {
+          title: 'Breaking News: You Have a Task 📰',
+          body: `"${task.name}" is scheduled for tomorrow at ${task.time}`
+        },
+        tokens: tokens // sendMulticast requires this key
+      };
+
+      try {
+        const response = await admin.messaging().sendEachForMulticast(message);
+        console.log(`[FCM] Sent task "${task.name}" to ${response.successCount}/${tokens.length} devices.`);
+        if (response.failureCount > 0) {
+          response.responses.forEach((resp, idx) => {
+            if (!resp.success) {
+              console.error(`[FCM ERROR] Token: ${tokens[idx]} =>`, resp.error?.message);
+            }
+          });
+        }
+      } catch (err) {
+        console.error('[FCM MULTICAST ERROR]', err.message || err);
+      }
+    }
+
+    console.log(`[CRON] Processed ${tasks.length} tasks for day ${dbTomorrowDay}.`);
+  }
+    
+    else {
     const tasks = await Task.find({ day: dbTomorrowDay, week: 'this' });
     const tokenDocs = await FCMToken.find();
     const tokens = tokenDocs.map(doc => doc.token).filter(Boolean);
@@ -478,7 +516,10 @@ cron.schedule('45 17 * * *', async () => {
     }
 
     console.log(`[CRON] Processed ${tasks.length} tasks for day ${dbTomorrowDay}.`);
-  } catch (err) {
+  }}
+   
+  
+  catch (err) {
     console.error('[CRON ERROR]', err);
   }
 }, {

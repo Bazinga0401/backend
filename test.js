@@ -309,6 +309,22 @@ app.post('/upload', authMiddleware, adminMiddleware, upload.single('file'), asyn
     res.status(500).json({ success: false, message: 'Error saving file metadata' });
   }
 });
+app.get('/preview/:filename' ,async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const file = await gfs.files.findOne({ filename });
+    if (!file) return res.status(404).json({ success: false, message: 'File not found' });
+
+    const readStream = gridFSBucket.openDownloadStream(file._id);
+
+    res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'inline'); // 👁️ allows preview
+    readStream.pipe(res);
+  } catch (err) {
+    console.error('[Preview Error]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
 app.get('/files', authMiddleware, async (req, res) => res.json({ success: true, files: await UploadedFile.find().sort({ uploadedAt: -1 }) }));
 

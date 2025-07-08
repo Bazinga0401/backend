@@ -142,7 +142,7 @@ app.post('/verify-reset', async (req, res) => {
 
 app.post('/api/signup', async (req, res) => {
   const { name, email, password } = req.body;
-    if (!email.endsWith('@me.iitr.ac.in')) {
+    if (email.endsWith('@me.iitr.ac.in')) {
     return res.status(400).json({ success: false, message: 'Only IITR emails are allowed' });
   }
 

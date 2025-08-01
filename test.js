@@ -13,12 +13,12 @@ const crypto = require('crypto');
 const { GridFsStorage } = require('multer-gridfs-storage');
 const Grid = require('gridfs-stream');
 const admin = require('firebase-admin');
-// const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-// const Subscription = require('./subscription');
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount)
-// });
+const Subscription = require('./subscription');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const FCMToken = mongoose.model('FCMToken', new mongoose.Schema({ token: String }));
 
@@ -584,4 +584,5 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 

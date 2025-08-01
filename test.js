@@ -20,13 +20,12 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-const FCMTokenSchema = new mongoose.Schema({
+const FCMToken = mongoose.model('FCMToken', new mongoose.Schema({
   token: { type: String, required: true },
   subbatch: { type: String, required: true },
   username: { type: String, required: true }
-});
+}));
 
-module.exports = mongoose.model('FCMToken', FCMTokenSchema);
 
 const SECRET = process.env.SECRET;
 const app = express();
@@ -601,6 +600,7 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 

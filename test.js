@@ -61,7 +61,7 @@ function authMiddleware(req, res, next) {
 // Admin check
 
 function adminMiddleware(req, res, next) {
-  const allowed = ['Harsh Ninania', 'Bazinga!', '24119080'];
+  const allowed = ['Harsh Ninania', 'Bazinga!', '24119080','24119081'];
   if (!allowed.includes(req.user.username)) return res.status(403).json({ success: false, message: 'Admins only' });
   next();
 }
@@ -584,3 +584,4 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+

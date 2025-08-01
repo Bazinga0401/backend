@@ -15,12 +15,18 @@ const Grid = require('gridfs-stream');
 const admin = require('firebase-admin');
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-const Subscription = require('./subscription');
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-const FCMToken = mongoose.model('FCMToken', new mongoose.Schema({ token: String }));
+const FCMTokenSchema = new mongoose.Schema({
+  token: { type: String, required: true },
+  subbatch: { type: String, required: true },
+  username: { type: String, required: true }
+});
+
+module.exports = mongoose.model('FCMToken', FCMTokenSchema);
 
 const SECRET = process.env.SECRET;
 const app = express();
@@ -385,12 +391,23 @@ app.post('/fcm-subscribe', authMiddleware, async (req, res) => {
   if (!token) return res.status(400).json({ success: false, message: 'Token missing' });
 
   try {
-    await FCMToken.findOneAndUpdate({ token }, { token, subbatch: req.user.subbatch }, { upsert: true });
+    await FCMToken.findOneAndUpdate(
+      { username: req.user.username }, // Use username as the lookup key
+      {
+        token,
+        subbatch: req.user.subbatch,
+        username: req.user.username
+      },
+      { upsert: true }
+    );
+
     res.json({ success: true });
   } catch (err) {
+    console.error('[🔥 Error saving FCM token]', err);
     res.status(500).json({ success: false, message: 'DB error' });
   }
 });
+
 
 
 app.post('/send-fcm', async (req, res) => {
@@ -584,5 +601,6 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 

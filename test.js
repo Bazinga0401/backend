@@ -267,18 +267,21 @@ app.post('/task', authMiddleware, adminMiddleware, async (req, res) => {
     await newTask.save();
 
     // ✅ Notify users from same subbatch
-    const users = await User.find({ subbatch });
-    const notifications = users.map(user => {
-      if (user.fcmToken) {
-        return sendPushNotification(user.fcmToken, {
-          title: 'Breaking News: You Have a Task 📰',
-          body: `${name} at ${time} (${week === 'this' ? 'This Week' : 'Next Week'})`,
-        });
-      }
-    });
+   const tokens = await FCMToken.find({ subbatch });
+const message = {
+  notification: {
+    title: 'Breaking News: You Have a Task 📰',
+    body: `${name} at ${time} (${week === 'this' ? 'This Week' : 'Next Week'})`,
+  },
+  tokens: tokens.map(t => t.token)
+};
 
-    await Promise.all(notifications);
-
+try {
+  const response = await admin.messaging().sendEachForMulticast(message);
+  console.log(`[FCM] Sent to ${response.successCount}/${tokens.length} users`);
+} catch (err) {
+  console.error('[FCM SEND ERROR]', err);
+}
     res.status(201).json({ success: true, task: newTask });
 
   } catch (err) {
@@ -390,15 +393,18 @@ app.post('/fcm-subscribe', authMiddleware, async (req, res) => {
   if (!token) return res.status(400).json({ success: false, message: 'Token missing' });
 
   try {
-    await FCMToken.findOneAndUpdate(
-      { username: req.user.username }, // Use username as the lookup key
-      {
-        token,
-        subbatch: req.user.subbatch,
-        username: req.user.username
-      },
-      { upsert: true }
-    );
+    // 💥 Optional: Remove duplicate FCM tokens (same token used by others)
+    await FCMToken.deleteMany({ token });
+
+    // 💥 Optional: Remove existing token for this user (cleanup if they switch devices)
+    await FCMToken.deleteMany({ username: req.user.username });
+
+    // ✅ Then insert fresh one
+    await FCMToken.create({
+      token,
+      subbatch: req.user.subbatch,
+      username: req.user.username
+    });
 
     res.json({ success: true });
   } catch (err) {
@@ -406,6 +412,7 @@ app.post('/fcm-subscribe', authMiddleware, async (req, res) => {
     res.status(500).json({ success: false, message: 'DB error' });
   }
 });
+
 
 
 
@@ -438,30 +445,6 @@ app.post('/send-fcm', async (req, res) => {
     }
   }}}
 );
-
-app.post('/subscribe', async (req, res) => {
-  const sub = req.body;
-
-  // 🛡️ Validate: if endpoint is missing, reject
-  if (!sub || !sub.endpoint) {
-    console.error('❌ Invalid subscription received');
-    return res.status(400).json({ success: false, message: 'Invalid subscription' });
-  }
-
-  try {
-    await Subscription.findOneAndUpdate(
-      { endpoint: sub.endpoint },
-      sub,
-      { upsert: true, new: true }
-    );
-    res.status(201).json({ success: true, message: 'Subscribed' });
-  } catch (err) {
-    console.error('Subscription save error:', err);
-    res.status(500).json({ success: false, message: 'Subscription failed' });
-  }
-});
-
-
 
 // Every Monday 00:00 IST — clear old "this" week & promote "next" week
 cron.schedule('0 0 * * 1', async () => {
@@ -600,6 +583,7 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 

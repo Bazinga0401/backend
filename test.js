@@ -277,7 +277,7 @@ app.post('/task', authMiddleware, adminMiddleware, async (req, res) => {
   data: {
     url: '/index.html'
   },
-  tokens: tokensArray
+  tokens: tokens
 };
 
 
@@ -518,7 +518,7 @@ cron.schedule('45 17 * * *', async () => {
   data: {
     url: '/index.html'
   },
-  tokens: tokensArray
+  tokens: tokens
 };
 
       try {
@@ -592,6 +592,7 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 

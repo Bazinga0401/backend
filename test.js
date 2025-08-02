@@ -269,7 +269,7 @@ app.post('/task', authMiddleware, adminMiddleware, async (req, res) => {
     // ✅ Notify users from same subbatch
    const tokens = await FCMToken.find({ subbatch });
 
-    const message = {
+  const message = {
   notification: {
     title: 'Breaking News: You Have a Task 📰',
     body: `${name} at ${time} (${week === 'this' ? 'This Week' : 'Next Week'})`
@@ -277,7 +277,7 @@ app.post('/task', authMiddleware, adminMiddleware, async (req, res) => {
   data: {
     url: '/index.html'
   },
-  tokens: tokens.map(t => t.token)
+  tokens: tokensArray
 };
 
 
@@ -510,13 +510,16 @@ cron.schedule('45 17 * * *', async () => {
     }
 
     for (const task of tasks) {
-      const message = {
-        notification: {
-          title: 'Breaking News: You Have a Task 📰',
-          body: `"${task.name}" is scheduled for tomorrow at ${task.time}`
-        },
-        tokens: tokens // sendMulticast requires this key
-      };
+     const message = {
+  notification: {
+    title: 'Breaking News: You Have a Task 📰',
+    body: `${name} at ${time} (${week === 'this' ? 'This Week' : 'Next Week'})`
+  },
+  data: {
+    url: '/index.html'
+  },
+  tokens: tokensArray
+};
 
       try {
         const response = await admin.messaging().sendEachForMulticast(message);
@@ -589,6 +592,7 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 

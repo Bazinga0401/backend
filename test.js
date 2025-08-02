@@ -268,14 +268,18 @@ app.post('/task', authMiddleware, adminMiddleware, async (req, res) => {
 
     // ✅ Notify users from same subbatch
    const tokens = await FCMToken.find({ subbatch });
-const message = {
-  data: {
+
+    const message = {
+  notification: {
     title: 'Breaking News: You Have a Task 📰',
-    body: `${name} at ${time} (${week === 'this' ? 'This Week' : 'Next Week'})`,
+    body: `${name} at ${time} (${week === 'this' ? 'This Week' : 'Next Week'})`
+  },
+  data: {
     url: '/index.html'
   },
   tokens: tokens.map(t => t.token)
 };
+
 
 
 try {
@@ -585,6 +589,7 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 

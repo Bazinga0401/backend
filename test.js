@@ -501,7 +501,7 @@ cron.schedule('45 17 * * *', async () => {
   try {
     if(dbTomorrowDay== 0){
       const tasks = await Task.find({ day: dbTomorrowDay, week: 'next' });
-    const tokenDocs = await FCMToken.find();
+   const tokenDocs = await FCMToken.find({ subbatch: task.subbatch });
     const tokens = tokenDocs.map(doc => doc.token).filter(Boolean);
 
     if (tokens.length === 0) {
@@ -541,7 +541,7 @@ cron.schedule('45 17 * * *', async () => {
     
     else {
     const tasks = await Task.find({ day: dbTomorrowDay, week: 'this' });
-    const tokenDocs = await FCMToken.find();
+    const tokenDocs = await FCMToken.find({ subbatch: task.subbatch });
     const tokens = tokenDocs.map(doc => doc.token).filter(Boolean);
 
     if (tokens.length === 0) {
@@ -592,6 +592,7 @@ app.get('/send-test-push', (req, res) => {
 // Start server
 const PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
